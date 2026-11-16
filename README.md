@@ -1,190 +1,275 @@
+<div align="center">
+
 # dsh-multi-workspace
 
-## 安全与状态说明（先读）
+**One project, more folders — write/edit and the shell get the same write rights in every one of them.**
 
-> **只在一台机器上验证过，不保证完全安全。**
+A multi-folder workspace plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH). A workspace keeps its primary folder and can mount one or more extra folders, and **the write/edit tools and the shell (pwsh/bash/terminal/PTC) write to those extra folders with the same rights as the main workspace**. The main workspace can never be removed.
+
+<a href="https://github.com/KittenSleepwalk/dsh-multi-workspace/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/KittenSleepwalk/dsh-multi-workspace?style=flat-square"></a>
+<a href="https://github.com/KittenSleepwalk/dsh-multi-workspace/issues"><img alt="GitHub issues" src="https://img.shields.io/github/issues/KittenSleepwalk/dsh-multi-workspace?style=flat-square"></a>
+<a href="./LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/License-MIT-amber.svg?style=flat-square"></a>
+<a href="https://github.com/KittenSleepwalk/dsh-multi-workspace"><img alt="DSH >= 0.2.0-rc.1" src="https://img.shields.io/badge/DSH-%3E%3D0.2.0--rc.1-4d6bfe?style=flat-square"></a>
+<img alt="Windows only" src="https://img.shields.io/badge/Platform-Windows-0078D4?style=flat-square">
+
+**English** · [简体中文](./README.zh-CN.md)
+
+</div>
+
+> [!WARNING]
+> **Only verified on one machine — not guaranteed to be fully safe.**
 >
-> - 在作者本机运行一切正常；沙盒验证（`@kittensleepwalk/dsh-sandbox-gate`）也已通过。
-> - 但**只试验了这一台机器**，没有在第二台机器、也没有在其它 DSH 版本上验证过。
-> - 本插件会改 Windows ACL、把额外文件夹纳入沙盒可写范围，权限面变化较大。
->   **安装前务必备份** `~/.dsh`，并确认你接受「额外文件夹对 write/edit 与 shell 同权可写」。
+> - It runs fine on the author's machine, and sandbox verification through [`@kittensleepwalk/dsh-sandbox-gate`](https://github.com/KittenSleepwalk/dsh-sandbox-gate) has passed too.
+> - But it has **only been tried on that one single machine** — never on a second machine, and never on other DSH versions.
+> - **This plugin modifies Windows ACLs and pulls extra folders into the sandbox's writable range, so the permission surface changes substantially.** **Back up `~/.dsh` before installing**, and make sure you accept that "extra folders are equally writable for write/edit and the shell".
 >
-> **推荐先安装 `@kittensleepwalk/dsh-sandbox-gate`**：它会先把每个待装插件放进一次性
-> 沙盒副本里跑一遍（启动、冷重启、session、其它插件、硬件占用），过了才允许装进主机。
+> **Install [`@kittensleepwalk/dsh-sandbox-gate`](https://github.com/KittenSleepwalk/dsh-sandbox-gate) first**: it runs each candidate plugin inside a throwaway sandbox copy first (boot, cold restarts, sessions, other plugins, hardware contention), and only lets it reach the host after it passes.
 >
 > ```bash
 > pnpm add github:KittenSleepwalk/dsh-sandbox-gate
 > ```
 
-## 安装
+---
+
+## 🚀 Install
 
 ```bash
-# 方式一：直接从 GitHub 装（仓库根就是包根）
+# 1) straight from GitHub (the repository root *is* the package root)
 pnpm add github:KittenSleepwalk/dsh-multi-workspace
 
-# 方式二：本地 tarball
-pnpm pack    # 产出 kittensleepwalk-dsh-multi-workspace-0.1.0.tgz
+# 2) or from a local tarball
+pnpm pack    # produces kittensleepwalk-dsh-multi-workspace-0.1.0.tgz
 pnpm add ./kittensleepwalk-dsh-multi-workspace-0.1.0.tgz
 ```
 
-本包自带 `cordis.patch.yml`，装好后把包名 `@kittensleepwalk/dsh-multi-workspace`
-加进 DSH profile 的 `dsh.profile.bundles` 即可，不需要手写 entry；重启 DSH 生效。
+This package ships its own `cordis.patch.yml`: after installing, just add the package name
+`@kittensleepwalk/dsh-multi-workspace` to `dsh.profile.bundles` in your DSH profile — no hand-written
+entry needed — and restart DSH for it to take effect.
 
-要求：Node.js ≥ 20，DSH ≥ 0.2.0-rc.1（Windows，需要 `@deepseek-ai/dsh-sandbox-windows-acl`
-提供的 ACL 后端）。下文的 `%USERPROFILE%` 是占位符，按自己的环境替换。
+Requirements: **Windows only** — Node.js ≥ 20, DSH ≥ 0.2.0-rc.1, with the ACL backend provided by
+`@deepseek-ai/dsh-sandbox-windows-acl`. The `%USERPROFILE%` below is a placeholder — replace it with
+whatever fits your environment.
 
-DSH（DeepSeek Harness）「多文件夹工作区」插件：让一个项目（workspace）在原有主文件夹之外，
-再挂载一个或多个额外文件夹，并让 **write/edit 工具与 shell（pwsh/bash/终端/PTC）在额外文件夹里
-与主工作区同权可写**；主工作区永远不可移除。
+---
 
-## 交互
+## 🧭 Interaction
 
-1. **工作区（项目）行的右键菜单**，以及**行右侧三个点按钮**打开的同一份菜单，都被统一成固定六项（图标 + 文字，样式直接沿用宿主菜单行）：
+1. **The workspace (project) row's right-click menu** — and the very same menu opened by the three-dot
+   button on the right of the row — are both normalized into the same fixed **six entries** (icon + text,
+   styled with the host's own menu-row styles):
 
    ```
-   重命名
-   打开文件夹        ← 一次打开主文件夹 + 全部额外文件夹
+   Rename
+   Open folders        ← opens the main folder + all extra folders at once
    ─────────
-   置顶工作区        ← 移到工作区列表最上方
-   设置工作区        ← 本插件的文件夹对话框
+   Pin workspace       ← moves it to the top of the workspace list
+   Workspace settings  ← this plugin's folder dialog
    ─────────
-   归档工作区        ← 归档该工作区下全部会话（运行中的会话跳过）
-   删除工作区
+   Archive workspace   ← archives every session under that workspace (running sessions are skipped)
+   Delete workspace
    ```
 
-   - 其它插件给这个菜单新增的条目一律不显示（「复制工作区路径」等不在上表内的都不显示）；
-   - 「重命名」「删除工作区」直接复用宿主条目，右键后走的仍是官方流程（内联重命名 / 官方确认框）；
-   - 「置顶工作区」「归档工作区」宿主通常没有，由本插件补齐（走 `/menu/pin`、`/menu/archive`）；
-   - 「置顶工作区」是**持久置顶**：写进插件配置（`config.pinned`），重启后仍然有效；置顶的工作区永远排在
-     列表最上面，新建的工作区会插到置顶块**下方**；再点一次「置顶工作区」= 取消置顶；
-   - 「打开文件夹」不是模拟 explorer：会逐个调用宿主官方的 `open-in-app` 打开路由（和原菜单项同一个
-     启动器，`/open-in-app/apps` + `/open-in-app/open`），主目录与全部额外文件夹各开一次；
-   - 侧边栏每个工作区有一圈**浅灰外框**，置顶的连续几个工作区共用一圈**深灰外框**；
-   - 若宿主连「重命名」「删除工作区」都没有，本插件会自己补上（输入框重命名 / 确认框删除）。
-2. 菜单接管策略（避免和别的插件抢 UI）：优先订阅内核 `contextMenus.active`；菜单打开后先等 DOM
-   静默（别的插件改完 UI），再最多改写 3 次；3 次都失败就只追加「打开文件夹」「设置工作区」两项，
-   其它条目原样保留。宿主菜单重渲染时会在剩余次数内自动修复。
-   两种行结构都支持（`div.itemWrap > button` 与按钮直接挂在列表容器下的扁平结构）；每次改写后都会校验
-   「6 行 + 2 条分栏线且都在菜单内」，不满足就回滚重试，**不会把菜单清空**。
-3. 「设置工作区」对话框：
-   - 「主工作区（不可移除）」固定在列表顶部，**没有移除按钮**（host 侧 API 也会拒绝移除主工作区）；
-   - 「额外文件夹」列表：可「移除」任意一项；
-   - 底部：「选择文件夹…」（系统目录选择器）→ 选中的目录会立即挂载；
-   - 「重新挂载全部」、「刷新」。
-4. 会话头部动作区另有一个「文件夹」按钮（备用入口，打开同一个对话框）。
-5. 挂载生效后，agent 的文件/命令工具可以直接读写这些目录；模型侧的运行上下文也会列出额外文件夹。
+   _Menu labels follow the host UI language; in a Chinese UI these six read 重命名 / 打开文件夹 /
+   置顶工作区 / 设置工作区 / 归档工作区 / 删除工作区._
 
-已知限制：
+   - Entries other plugins add to this menu are never shown (anything not in the table above — such as
+     "copy workspace path" — is not displayed);
+   - "Rename" and "Delete workspace" reuse the host entries directly, so after right-clicking you still go
+     through the official flow (inline rename / official confirm dialog);
+   - "Pin workspace" and "Archive workspace" usually do not exist in the host; this plugin supplies them
+     (via `/menu/pin`, `/menu/archive`);
+   - "Pin workspace" is a **persistent pin**: it is written into the plugin config (`config.pinned`) and
+     still in effect after a restart; pinned workspaces always sit at the very top of the list, and newly
+     created workspaces are inserted **below** the pinned block; clicking "Pin workspace" again unpins it;
+   - "Open folders" does not simulate explorer: it calls the host's official `open-in-app` open route once
+     per folder (the same launcher as the original menu entry, `/open-in-app/apps` + `/open-in-app/open`),
+     once for the main folder and once for each extra folder;
+   - every workspace in the sidebar has a **light-gray outline**, and consecutive pinned workspaces share a
+     **dark-gray outline**;
+   - if the host lacks even "Rename" / "Delete workspace", this plugin supplies them itself (rename via an
+     input box / delete via a confirm dialog).
+2. Menu takeover strategy (to avoid fighting other plugins over the UI): prefer subscribing to the kernel's
+   `contextMenus.active`; after the menu opens, first wait for the DOM to go quiet (other plugins finish
+   mutating the UI), then rewrite at most 3 times; if all 3 attempts fail, only append "Open folders" and
+   "Workspace settings" and leave every other entry as it was. When the host re-renders the menu, it
+   repairs itself within the remaining attempts.
+   Both row structures are supported (`div.itemWrap > button` and the flat structure where the buttons hang
+   directly under the list container); after every rewrite it verifies "6 rows + 2 separators, all inside
+   the menu", and rolls back and retries when that fails — **it never empties the menu**.
+3. The "Workspace settings" dialog:
+   - "Main workspace (not removable)" is fixed at the top of the list and **has no remove button** (the
+     host-side API also refuses to remove the main workspace);
+   - the "Extra folders" list allows "Remove" on any entry;
+   - at the bottom: "Choose folder…" (the system directory picker) → the selected directory is mounted
+     immediately;
+   - "Remount all", "Refresh".
+4. The session header action area has one more "folder" button (a backup entry point that opens the same
+   dialog).
+5. Once a mount takes effect, the agent's file/command tools can read and write those directories directly,
+   and the model-side runtime context also lists the extra folders.
 
-- 置顶状态存在插件自己的配置里（DSH 0.2.x 注册表没有工作区级 pin 字段）：由本插件在启动、工作区新增、
-  定时兜底时把置顶块压到最上面；如果别的东西绕开本插件直接改注册表顺序，最多 15 秒会被纠正回来。
-- 「归档工作区」只归档**已存在且不在运行中**的会话；运行中的会话会被跳过并在提示里给出数量。
-- 菜单接管依赖内核 `contextMenus` + 官方菜单行结构；宿主大改版后若完全识别不出（3 次改写失败），
-  会自动退回「只追加打开文件夹 / 设置工作区」的模式。
-- 工作区外框/Sidebar 置顶标记是 DOM 注解，宿主重渲染后会自动补回；若宿主改版换了分组结构，
-  外框可能落回标题行（不影响功能）。
+### Known limitations
 
+- Pin state lives in the plugin's own config (the DSH 0.2.x registry has no workspace-level pin field): this
+  plugin pushes the pinned block to the top on startup, when a workspace is added, and on a periodic
+  backstop; if something else reorders the registry behind this plugin's back, it is corrected within
+  15 seconds at most.
+- "Archive workspace" only archives sessions that **already exist and are not running**; running sessions
+  are skipped and their count is reported in the toast.
+- Menu takeover depends on the kernel `contextMenus` plus the official menu row structure; after a major
+  host redesign, if it cannot recognize the menu at all (3 rewrites fail), it falls back automatically to
+  the "append Open folders / Workspace settings only" mode.
+- The workspace outline and the sidebar pin marker are DOM annotations and are added back after the host
+  re-renders; if a host release changes the grouping structure, the outline may fall back to the title row
+  (functionality unaffected).
 
-## 安全模型（重要，请读）
+---
 
-挂载一个额外文件夹会**修改该目录的安全描述符**，与 DSH 对工作区本身所做的完全一致：
+## 🔐 Security model (important, please read)
 
-- 整棵子树被标记为 **Low 完整性**（DSH 沙盒的 Windows ACL 后端要求，否则低完整性子的子进程无法写入）；
-- 目录获得一条 **Everyone 的删除限制 ACE**（`(CI)(DENY)(DC)`），以及一条指向主工作区写 SID 的
-  `(OI)(CI)(W,D,DC)` Allow ACE——后者就是"额外文件夹可写"的来源；
-- 这些授权是**常驻**的（跨会话、跨重启有效，和主工作区一致）；
-- 移除时会撤销 Allow ACE、尽力清除 Low 标签，并用 `icacls <dir> /remove:d *S-1-1-0` 精确移除那条
-  Everyone DENY；但 Windows 的安全描述符修改不是事务性的，极端情况下可能残留一条无害的 DENY ACE，
-  需要在该目录的「属性 → 安全 → 高级」里手动删掉。
+Mounting an extra folder **modifies that directory's security descriptor**, exactly as DSH already does for
+the workspace itself:
 
-其他约束：
+- the whole subtree is marked **Low integrity** (required by the DSH sandbox's Windows ACL backend,
+  otherwise low-integrity child processes could not write to it);
+- the directory gets an **Everyone delete-restriction ACE** (`(CI)(DENY)(DC)`), plus an
+  `(OI)(CI)(W,D,DC)` Allow ACE pointing at the main workspace's write SID — that second one is exactly
+  where "the extra folder is writable" comes from;
+- these grants are **persistent** (they survive sessions and restarts, just like the main workspace);
+- on removal the Allow ACE is revoked, the Low label is cleared as far as possible, and that Everyone DENY
+  is removed precisely with `icacls <dir> /remove:d *S-1-1-0`; but Windows security-descriptor changes are
+  not transactional, so in extreme cases a harmless leftover DENY ACE may remain and has to be deleted by
+  hand under the directory's Properties → Security → Advanced.
 
-- 只接受**本地固定卷上的 NTFS/ReFS 目录**；UNC 网络路径 / 映射网络盘会被拒绝
-  （SMB 服务端的访问检查不看 restricting SID，写限制在网络路径上不生效）。
-- 不能是：主工作区本身、主工作区的子目录（已可写，冗余）、主工作区的上级目录、盘符根目录、
-  DSH 数据目录（`$DSH_HOME`）、DSH 安装目录。
-- 目录必须由当前用户拥有且授予 `WRITE_OWNER`（通常"完全控制"即可）；否则挂载会失败并给出原因。
-- 首次挂载大树（几十万文件）可能耗时数十秒到数分钟（可继承 ACE 需要向全树传播），期间 UI 显示忙碌。
-- 注意：Low 标签会让**同一用户下的其它 Low 完整性进程**也能写该目录树。只挂载你信任的普通项目目录。
+Other constraints:
 
-## 实现方式（为什么不会拖垮 DSH）
+- only **NTFS/ReFS directories on local fixed volumes** are accepted; UNC network paths / mapped network
+  drives are rejected (the SMB server's access check does not look at the restricting SID, so the write
+  restriction does not take effect on network paths);
+- it must not be: the main workspace itself, a subdirectory of the main workspace (already writable,
+  redundant), a parent directory of the main workspace, a drive root, the DSH data directory
+  (`$DSH_HOME`), or the DSH install directory;
+- the directory must be owned by the current user and grant `WRITE_OWNER` (usually "Full control" is
+  enough); otherwise mounting fails and reports the reason;
+- mounting a large tree (hundreds of thousands of files) for the first time can take from tens of seconds
+  to several minutes (inheritable ACEs have to propagate through the whole tree); the UI shows busy while
+  it runs;
+- note: the Low label also lets **other low-integrity processes under the same user** write that directory
+  tree. Only mount ordinary project directories you trust.
 
-- **不改本体任何文件**：纯 profile 插件（`lib/index.js` host 半 + `lib/client.js` 浏览器半），
-  不静态 import 任何 `@deepseek-ai/dsh-*`；唯一的运行时依赖 `@deepseek-ai/dsh-sandbox-windows-acl`
-  用 `try/catch` 动态 import（失败就降级为「只有 write/edit 多根」）。
-- **shell 多根**：在额外目录上，用主工作区**同一个** `workspaceWriteSid` 打一套
-  `AclWriteGrant`；runner 的 `--workspace` 只指向主根，argv 完全不变。
-  （Windows ACL 下写入权限只由「令牌 restricting SID × 目标 DACL ACE × Low 标签」决定，与路径声明无关。）
-- **write/edit 多根**：在 `ctx.fs.writeText/editText` 上做运行时包装，把当次 `policy.workspaceRoot`
-  替换成命中的额外根——围栏本身（`writableRoots`）一行没抄。
-- 两处包装都带特征探测、幂等标记、服务替换后自愈（监听 `internal/service`）、以及彻底 try/catch；
-  任何一步失败只降级本插件能力，不影响 harness 启动。
-- `get /dsh-multi-workspace/health` 可看 aclAvailable / patches / 挂载表（仅回环可访问）。
-- 工作区菜单动作的 host 路由（POST、仅回环）：`/menu/pin`（切换置顶并重排）、`/menu/archive`（归档该工作区会话）、
-  `/menu/rename`、`/menu/delete`（后两个只在宿主缺少对应条目时使用）；`GET /menu/pinned` 返回置顶路径与
-  工作区摘要，供侧边栏画外框/标记用。`/menu/open-all` 仅作为官方 open-in-app 路由不可用时的兜底。
-- 打开文件夹走宿主官方 `open-in-app` 路由（`GET /open-in-app/apps`、`POST /open-in-app/open`），和原菜单项的启动器一致。
+---
 
-## 配置与数据
+## 🧩 How it works (why it won't drag DSH down)
 
-- 挂载清单：`<DSH_HOME>/multi-workspace/config.json`（键是 canonical 主工作区路径）。
-  结构：`{ version: 1, pinned: ["<置顶工作区绝对路径>", ...], workspaces: { "<主工作区绝对路径>": { folders: [{ path, addedAt, mountedAt, sid, baselineHasDeny }] } } }`
-  `pinned` 按最近置顶在前排序；删掉这个文件会同时清空挂载清单与置顶状态。
-- 插件自身没有数据库；删掉这个文件等于清空挂载清单（不会撤销已生成的 ACL，请先通过界面移除）。
+- **It changes no file of DSH itself**: a pure profile plugin (`lib/index.js` host half + `lib/client.js`
+  browser half) that statically imports no `@deepseek-ai/dsh-*`; the only runtime dependency,
+  `@deepseek-ai/dsh-sandbox-windows-acl`, is dynamically imported inside a `try/catch` (and on failure it
+  degrades to "write/edit multiple roots only").
+- **Shell multiple roots**: on the extra directory it applies a set of `AclWriteGrant`s using the **same**
+  `workspaceWriteSid` as the main workspace; the runner's `--workspace` still points at the main root only,
+  and argv is completely unchanged.
+  (Under Windows ACL, write permission is decided solely by "token restricting SID × target DACL ACE × Low
+  label", independent of the declared path.)
+- **write/edit multiple roots**: a runtime wrapper around `ctx.fs.writeText/editText` replaces the current
+  `policy.workspaceRoot` with the matching extra root — the fence itself (`writableRoots`) is not copied by
+  a single line.
+- Both wrappers come with feature detection, idempotency markers, self-healing after the service is
+  replaced (by listening on `internal/service`), and thorough `try/catch`; any failure only degrades this
+  plugin's own capabilities and never affects harness startup.
+- `GET /dsh-multi-workspace/health` shows aclAvailable / patches / the mount table (reachable from loopback
+  only).
+- Host routes for the workspace menu actions (POST, loopback only): `/menu/pin` (toggle pin and reorder),
+  `/menu/archive` (archive that workspace's sessions), `/menu/rename`, `/menu/delete` (the last two are only
+  used when the host lacks the corresponding entry); `GET /menu/pinned` returns the pinned paths and a
+  workspace summary, which the sidebar uses to draw outlines/markers. `/menu/open-all` is only a fallback
+  for when the official open-in-app route is unavailable.
+- "Open folders" goes through the host's official `open-in-app` routes (`GET /open-in-app/apps`,
+  `POST /open-in-app/open`), the same launcher as the original menu entry.
 
-### 允许受保护路径（例如 `%USERPROFILE%\.dsh` 及其子目录）
+---
 
-默认**拒绝**把以下位置挂载为额外文件夹（防止 agent 改坏 harness 自己的配置）：
+## ⚙️ Configuration & data
 
-- `$DSH_HOME`（默认 `%USERPROFILE%\.dsh`，含 profiles / sessions / plugins 等）；
-- DSH 安装目录（`...\dsh-tauri\dependencies\dsh`）；
-- 盘符根目录；主工作区本身或其子目录（这些本来就可写）。
+- Mount list: `<DSH_HOME>/multi-workspace/config.json` (keys are canonical main-workspace paths).
+  Structure: `{ version: 1, pinned: ["<absolute path of a pinned workspace>", ...], workspaces: { "<absolute main workspace path>": { folders: [{ path, addedAt, mountedAt, sid, baselineHasDeny }] } } }`
+  `pinned` is ordered most-recently-pinned first; deleting this file clears both the mount list and the pin
+  state.
+- The plugin keeps no database of its own; deleting this file is equivalent to clearing the mount list (it
+  does not revoke ACLs already created — remove them through the UI first).
 
-路径里带 `.` 本身不是问题（`D:\proj\.config` 这类正常目录可以直接添加）。被拦下的是上面这些
-**受保护根**。如果你确实要挂载配置文件目录，需要在 **profile 的 `cordis.patch.yml`** 里给
-`multi-workspace` 这一行做配置放行：
+### Allowing protected paths (e.g. `%USERPROFILE%\.dsh` and its subdirectories)
+
+By default the following locations are **refused** as extra folders (to keep the agent from breaking the
+harness's own configuration):
+
+- `$DSH_HOME` (default `%USERPROFILE%\.dsh`, containing profiles / sessions / plugins and so on);
+- the DSH install directory (`...\dsh-tauri\dependencies\dsh`);
+- drive roots; the main workspace itself or its subdirectories (those are already writable).
+
+A `.` in the path is not a problem by itself (an ordinary directory such as `D:\proj\.config` can be added
+directly). What gets blocked are the **protected roots** listed above. If you really do want to mount a
+configuration directory, allow it on the `multi-workspace` line of the **profile's `cordis.patch.yml`**:
 
 ```yaml
 # <profile>/cordis.patch.yml
 - id: multi-workspace
-  name: 'dsh-multi-workspace'   # 名称只是断言，可省略
+  name: 'dsh-multi-workspace'   # the name is only an assertion; it can be omitted
   config:
     allowProtectedRoots:
-      - '%USERPROFILE%\.dsh'            # 允许整个 DSH home（谨慎）
-      # - '%USERPROFILE%\.dsh\configs'  # 或者只允许某个子目录（推荐）
-    # allowDshHome: true   # 等价于把整个 $DSH_HOME 加进 allowProtectedRoots
+      - '%USERPROFILE%\.dsh'            # allow the whole DSH home (careful)
+      # - '%USERPROFILE%\.dsh\configs'  # or allow just one subdirectory (recommended)
+    # allowDshHome: true   # equivalent to adding all of $DSH_HOME to allowProtectedRoots
 ```
 
-说明：
+Notes:
 
-- `allowProtectedRoots` 里的路径可以写绝对路径，也支持 `~/...`（展开到系统用户目录）；
-  命中这些前缀的路径会跳过“受保护根”与“不能选上级目录”的拦截，其它检查（本地 NTFS/ReFS、
-  目录所有者/权限、主工作区本身不可添加、越界 ACL 等）仍然生效。
-- 该配置只放行，不会自动挂载任何目录；仍然需要在界面里添加。
-- 修改 `cordis.patch.yml` 会触发热加载，但本插件 host 半是模块级代码，**最稳妥是重启 DSH/GUI**。
-- 如果插件是用 `dsh plugin add` 安装成 bundle 的，同样可以在 profile 的 `cordis.patch.yml`
-  里追加上面这条 `- id: multi-workspace / config: ...` 覆盖层（patch 层对同一 id 的 config 是覆盖语义）。
-- 也可以手动编辑挂载清单 `config.json`，在对应工作区的 `folders` 里加
-  `{ "path": "%USERPROFILE%\\.dsh\\configs" }`，下一次工具调用前会自动挂载（如果已放行）。
-- **风险提示**：允许并挂载 `.dsh` 整个目录意味着 agent 可以写 profiles/sessions/plugins 等配置，
-  可能影响 harness 自身；建议只放行真正需要的子目录，并保留安装时生成的回滚包。
+- paths in `allowProtectedRoots` may be absolute or use `~/...` (expanded to the system user directory);
+  paths matching these prefixes skip the "protected root" and "parent directory not allowed" blocks, while
+  every other check (local NTFS/ReFS, directory owner/permissions, the main workspace itself not being
+  addable, out-of-bounds ACLs, etc.) still applies;
+- this config only grants permission; it never mounts anything by itself — you still have to add folders
+  through the UI;
+- editing `cordis.patch.yml` triggers hot reload, but this plugin's host half is module-level code, so the
+  **most reliable option is to restart DSH/GUI**;
+- if the plugin was installed as a bundle with `dsh plugin add`, you can likewise append the same
+  `- id: multi-workspace / config: ...` overlay to the profile's `cordis.patch.yml` (the patch layer treats
+  config for the same id as an override);
+- you can also edit the mount list `config.json` by hand and add
+  `{ "path": "%USERPROFILE%\\.dsh\\configs" }` to the relevant workspace's `folders`; it is mounted
+  automatically before the next tool call (if it has been allowed);
+- **risk warning**: allowing and mounting the entire `.dsh` directory means the agent can write
+  profiles/sessions/plugins and other configuration, which may affect the harness itself; allow only the
+  subdirectories you actually need, and keep the rollback package generated at install time.
 
-## 兼容性
+---
 
-- 依赖的公开接缝：`ctx.fs.writeText/editText`、`ctx.sandbox.confine`、`ctx.systemPrompt.context`、
-  `ctx.webServer.register`、客户端 slot `conversation.session.header.actions`、可选
-  `dsh.rightclick-menu.extensions` 注册表。
-- `peerDependencies` 只声明 `@deepseek-ai/dsh-sandbox-windows-acl: ">=0.2.0-rc.2"`，不锁上层版本。
-- 升级 harness 时：插件行若被版本策略禁用，只是本插件失效，harness 照常启动（见 `../tests` 的升级测试）。
+## 🧪 Compatibility
 
-## 目录
+- Public seams it relies on: `ctx.fs.writeText/editText`, `ctx.sandbox.confine`, `ctx.systemPrompt.context`,
+  `ctx.webServer.register`, the client slot `conversation.session.header.actions`, and the optional
+  `dsh.rightclick-menu.extensions` registry.
+- `peerDependencies` only declares `@deepseek-ai/dsh-sandbox-windows-acl: ">=0.2.0-rc.2"`; the upper-layer
+  version is not pinned.
+- When upgrading the harness: if the plugin row is disabled by a version policy, only this plugin stops
+  working and the harness still boots normally (see the upgrade tests in `../tests`).
+
+---
+
+## 📁 Layout
 
 ```
 dsh-multi-workspace/
-├─ package.json          # dsh.bundle.patch + dsh.client 声明
-├─ cordis.patch.yml      # bundle patch：插入 multi-workspace 行
-├─ lib/index.js          # host 半：HTTP 路由、ACL 授权、fs/sandbox 包装、运行时上下文
-├─ lib/client.js         # 浏览器半：右键菜单/弹窗/头部按钮（手写 __ModuleLoader__ 工厂）
-├─ tools/acl-cleanup.mjs # 独立 ACL 清理（卸载/排障）
-└─ README.md
+├─ package.json          # dsh.bundle.patch + dsh.client declarations
+├─ cordis.patch.yml      # bundle patch: inserts the multi-workspace row
+├─ lib/index.js          # host half: HTTP routes, ACL grants, fs/sandbox wrappers, runtime context
+├─ lib/client.js         # browser half: context menu / dialog / header button (hand-written __ModuleLoader__ factory)
+├─ tools/acl-cleanup.mjs # standalone ACL cleanup (uninstall / troubleshooting)
+├─ README.md
+└─ README.zh-CN.md
 ```
+
+---
+
+## 📄 License
+
+[MIT](./LICENSE) © 2026 KittenSleepwalk
