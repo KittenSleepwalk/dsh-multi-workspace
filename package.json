@@ -1,0 +1,67 @@
+{
+  "name": "@kittensleepwalk/dsh-multi-workspace",
+  "version": "0.1.0",
+  "description": "DSH 多文件夹工作区插件：一个项目可挂载多个额外文件夹，write/edit 与 shell 沙盒在额外文件夹上同权可写（Windows ACL 后端）。",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "tools",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "workspace",
+    "sandbox",
+    "windows-acl"
+  ],
+  "author": "kittensleepwalk",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/KittenSleepwalk/dsh-multi-workspace.git"
+  },
+  "homepage": "https://github.com/KittenSleepwalk/dsh-multi-workspace#readme",
+  "bugs": {
+    "url": "https://github.com/KittenSleepwalk/dsh-multi-workspace/issues"
+  },
+  "dsh": {
+    "manifestVersion": 1,
+    "engines": {
+      "dsh": ">=0.2.0-rc.1"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-workspace",
+        "@deepseek-ai/dsh-api-workspace-controller",
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-ui-renderer"
+      ]
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-sandbox-windows-acl": ">=0.2.0-rc.2"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-sandbox-windows-acl": {
+      "optional": true
+    }
+  }
+}

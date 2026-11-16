@@ -1,0 +1,5 @@
+# dsh-multi-workspace 的组合包层（bundle patch）：
+# 把插件行插入 profile 的插件树。id 取独立值，避免与已有行冲突。
+- insert:
+    - id: multi-workspace
+      name: '@kittensleepwalk/dsh-multi-workspace'
